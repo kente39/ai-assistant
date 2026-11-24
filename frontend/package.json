@@ -1,0 +1,9 @@
+{
+  "name": "ai-data-assistant-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "node scripts/build-config.js",
+    "dev": "node scripts/build-config.js && npx --yes serve public -l 5500"
+  }
+}
