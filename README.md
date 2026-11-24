@@ -5,9 +5,9 @@
 
 | 구분 | URL |
 |---|---|
-| 프론트엔드 (Vercel) | `https://<your-app>.vercel.app` |
-| 백엔드 API (Render) | `https://<your-api>.onrender.com` |
-| Swagger UI | `https://<your-api>.onrender.com/docs` |
+| 프론트엔드 (Vercel) | https://ai-assistant-frontend-bice.vercel.app |
+| 백엔드 API (Render) | https://ai-assistant-api-eir6.onrender.com |
+| Swagger UI | https://ai-assistant-api-eir6.onrender.com/docs |
 
 > ⏱ 백엔드는 Render 무료 플랜이라 15분간 요청이 없으면 잠듭니다. 첫 접속 시 30~60초 걸릴 수 있으며, 화면 상단에 "서버를 깨우는 중" 안내가 표시됩니다.
 
@@ -27,7 +27,7 @@
 
 - **Backend**: Python 3.10+, FastAPI, Pydantic v2, Uvicorn
 - **DB**: Firebase Firestore (`firebase-admin`)
-- **AI**: OpenAI Chat Completions API (`gpt-4o-mini` 기본, 환경 변수로 변경 가능) + Function Calling
+- **AI**: OpenAI 호환 Chat Completions API (`gpt-5-mini`, 교육용 API 게이트웨이 경유) + Function Calling
 - **Frontend**: HTML / CSS / Vanilla JavaScript (프레임워크·차트 라이브러리 없음, Canvas로 직접 그림)
 - **Deploy**: Render (백엔드), Vercel (프론트엔드)
 - **Bonus**: MCP Server (`mcp` Python SDK)
@@ -139,15 +139,23 @@ npm run dev        # → http://localhost:5500  (또는 VS Code Live Server로 p
 
 | 변수 | 필수 | 설명 | 예시 |
 |---|---|---|---|
-| `OPENAI_API_KEY` | ✅ | OpenAI API 키 (없으면 데모 모드) | `sk-...` |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | ✅ | 서비스 계정 JSON 전체(한 줄) 또는 base64 | `{"type":"service_account",...}` |
+| `OPENAI_API_KEY` | ✅ | OpenAI(호환) API 키 (없으면 데모 모드) | `sk-...` |
+| `OPENAI_BASE_URL` | | OpenAI 호환 게이트웨이 주소. 비우면 OpenAI 공식 주소 | `https://copa.codyssey.kr/v1` |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | ✅ | 서비스 계정 JSON 전체(한 줄) 또는 base64 (Render에는 base64 권장) | `ewogICJ0eXBl...` |
 | `ALLOWED_ORIGINS` | ✅ | CORS 허용 도메인, 쉼표 구분. 끝에 `/` 붙이지 말 것 | `https://my-ai.vercel.app,http://localhost:5500` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | | JSON 대신 키 파일 경로 사용 시 | `/etc/secrets/serviceAccountKey.json` |
-| `OPENAI_MODEL` | | 사용할 모델 | `gpt-4o-mini` |
-| `OPENAI_MAX_TOKENS` | | 답변 최대 토큰 (비용 보호) | `500` |
+| `OPENAI_MODEL` | | 사용할 모델 | `gpt-5-mini` |
+| `OPENAI_MAX_TOKENS` | | 답변 최대 토큰 (비용 보호). GPT-5 계열은 내부 추론 토큰도 포함되므로 2000 권장 | `2000` |
 | `CHAT_HISTORY_LIMIT` | | GPT에 함께 보낼 이전 메시지 수 | `10` |
 | `DATA_NAME` / `DATA_UNIT` | | 데이터 이름·단위 (프롬프트용) | `일별 매출` / `원` |
 | `STORAGE_BACKEND` | | `firestore`(기본) 또는 `memory`(로컬 테스트) | `firestore` |
+
+로컬에서는 키 파일 경로 방식(`GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json`)이, Render에서는 base64 방식이 편합니다.
+
+```bash
+# base64 변환 (backend 폴더)
+python -c "import base64;print(base64.b64encode(open('serviceAccountKey.json','rb').read()).decode())"
+```
 
 `ALLOWED_ORIGINS`에 `*.vercel.app`을 넣으면 Vercel 프리뷰 도메인 전체를 허용합니다.
 
@@ -233,7 +241,9 @@ conversations/{autoId}  title, created_at, updated_at,
 
 **③ Pydantic 검증** — `DataCreate`는 날짜 형식, `value ≥ 0`, 메모 200자, 미래 날짜 금지를 검사하고, `DataUpdate`는 빈 수정 요청을 막습니다. 잘못된 요청은 서비스 로직과 DB에 닿기 전에 422로 거절되고, 같은 스키마가 Swagger 문서도 자동으로 만듭니다.
 
-**④ CORS / 환경 변수 / 키 관리** — 프론트(vercel.app)와 백엔드(onrender.com)는 출처가 달라 브라우저가 기본적으로 요청을 막습니다. `ALLOWED_ORIGINS`로 내 프론트만 허용합니다. 키를 코드에 넣으면 GitHub에 공개되는 순간 도용·과금 위험이 있으므로 Render 환경 변수에만 두고, 프론트에는 공개해도 되는 API 주소만 둡니다.
+**④ 프롬프트 규칙도 컨텍스트의 일부** — 요약만 넣었을 때 GPT가 "이번 달(24일치) 합계 644만원은 전월(31일치) 812만원 대비 20.7% 감소"라고 답한 적이 있습니다. 기간 길이가 다른 합계를 그대로 비교한 오류로, 실제 일평균은 오히려 소폭 상승이었습니다. 시스템 프롬프트에 "진행 중인 달은 합계가 아닌 일평균으로 비교하라"는 규칙을 추가해 해결했습니다. 숫자를 주는 것만큼 **숫자를 어떻게 해석할지** 알려 주는 것도 중요합니다.
+
+**⑤ CORS / 환경 변수 / 키 관리** — 프론트(vercel.app)와 백엔드(onrender.com)는 출처가 달라 브라우저가 기본적으로 요청을 막습니다. `ALLOWED_ORIGINS`로 내 프론트만 허용합니다. 키를 코드에 넣으면 GitHub에 공개되는 순간 도용·과금 위험이 있으므로 Render 환경 변수에만 두고, 프론트에는 공개해도 되는 API 주소만 둡니다.
 
 ## 10. ⭐ 보너스: Function Calling + MCP
 
@@ -288,8 +298,19 @@ Claude Desktop `claude_desktop_config.json`:
 
 ## 12. 제출 스크린샷
 
-> 배포 후 실제 화면으로 교체하세요. (`docs/screenshots/`의 예시는 로컬 데모 모드 화면)
+### 데이터 요약이 보이는 채팅 화면
+![chat](docs/screenshots/chat.png)
 
-| 데이터 요약이 보이는 채팅 화면 | 데이터 관리 (추가 동작) | 대화 기록 (불러오기) |
-|---|---|---|
-| ![chat](docs/screenshots/chat.png) | ![data](docs/screenshots/data.png) | ![history](docs/screenshots/history.png) |
+### 데이터 관리 (추가 동작)
+![data](docs/screenshots/data.png)
+
+### 대화 기록 (불러오기)
+![history](docs/screenshots/history.png)
+
+### ⭐ 보너스: 도구 호출 (Function Calling)
+"무슨 요일에 제일 잘 팔려?" → 요약에 요일별 평균이 없으므로 GPT가 `get_statistics()`를 호출하고, 호출 이유("요일별 평균 및 표준편차 확인")를 함께 기록했습니다.
+
+![tool-calling](docs/screenshots/tool-calling.png)
+
+### ⭐ 보너스: 추세 그래프 · 확장 통계
+![chart](docs/screenshots/chart.png)
